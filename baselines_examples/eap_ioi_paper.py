@@ -64,7 +64,12 @@ def get_ioi_data(ds, tokenizer, max_examples):
         pred_pos = last_real_pos - 1
 
         correct_tok = int(tokens[i, last_real_pos].item())
-        distractor_tok = int(tokenizer.encode(" " + ds[i]["b"])[-1])
+
+        # Match paper's eval: distractor is whichever of a/b is NOT the target.
+        target_word = clean_texts[i].strip().split()[-1]
+        a_name, b_name = ds[i]["a"], ds[i]["b"]
+        distractor_name = b_name if a_name == target_word else a_name
+        distractor_tok = int(tokenizer.encode(" " + distractor_name)[-1])
 
         pred_indices.append(pred_pos)
         correct_tokens.append(correct_tok)
