@@ -26,6 +26,7 @@ python baselines_examples/eap_ioi_paper.py \
   --train-examples 200 \
   --eval-examples 200 \
   --eval-split validation \
+  --sparsities "93,94,95,96,97,98,99" \
   --out-dir results/ioi-eap-val
 
 # 2) Test run: 36,084 examples (paper-grade numbers)
@@ -34,4 +35,5 @@ python baselines_examples/eap_ioi_paper.py \
   --train-examples 200 \
   --eval-examples 36084 \
   --eval-split test \
+  --sparsities "93,94,95,96,97,98,99" \
   --out-dir results/ioi-eap-test
