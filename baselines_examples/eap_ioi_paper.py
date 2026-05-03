@@ -186,8 +186,8 @@ def get_full_model_logits(model, tokens, batch_size):
 def circuit_logits_for_edges(model, clean_tokens, corr_tokens, keep_edges, batch_size):
     graph = EAPGraph(
         model.cfg,
-        upstream_nodes=["resid_pre", "head", "mlp"],
-        downstream_nodes=["head", "mlp", "resid_post"],
+        upstream_nodes=["head", "mlp"],
+        downstream_nodes=["head", "mlp"],
     )
 
     graph.adj_matrix = make_removed_edge_matrix(graph, keep_edges)
@@ -315,8 +315,8 @@ def main():
         clean_tokens=train_toks,
         corrupted_tokens=train_corr_toks,
         metric=eap_metric,
-        upstream_nodes=["resid_pre", "head", "mlp"],
-        downstream_nodes=["head", "mlp", "resid_post"],
+        upstream_nodes=["head", "mlp"],
+        downstream_nodes=["head", "mlp"],
         batch_size=args.batch_size,
     )
 
