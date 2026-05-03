@@ -46,12 +46,23 @@ def tokenize_pair(clean_texts, corr_texts, tokenizer):
     return clean.input_ids, corr.input_ids, clean.attention_mask
 
 
-def get_ioi_data(ds, tokenizer, max_examples):
+def build_swap_corruption(ds_row):
+    # ABBA <-> BABA: re-render the same template with a and b swapped.
+    template = ds_row["template"]
+    obj = ds_row["object"] if ds_row["object"] is not None else ""
+    place = ds_row["place"] if ds_row["place"] is not None else ""
+    return template.format(A=ds_row["b"], B=ds_row["a"], OBJECT=obj, PLACE=place)
+
+
+def get_ioi_data(ds, tokenizer, max_examples, use_swap_corruption=True):
     if max_examples is not None and max_examples < len(ds):
         ds = ds.select(range(max_examples))
 
     clean_texts = list(ds["ioi_sentences"])
-    corr_texts = list(ds["corr_ioi_sentences"])
+    if use_swap_corruption:
+        corr_texts = [build_swap_corruption(ds[i]) for i in range(len(ds))]
+    else:
+        corr_texts = list(ds["corr_ioi_sentences"])
 
     tokens, corr_tokens, attn = tokenize_pair(clean_texts, corr_texts, tokenizer)
 
