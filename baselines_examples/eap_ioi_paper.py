@@ -278,33 +278,27 @@ def main():
     train_correct = train_correct[:usable_train_n]
     train_distractor = train_distractor[:usable_train_n]
 
-    print("Computing full model logits for KL-based EAP metric...")
-    train_full_logits = get_full_model_logits(model, train_toks, args.batch_size)
-
     metric_state = {"start": 0}
 
-    def eap_kl_metric(logits):
+    def eap_metric(logits):
         start = metric_state["start"]
         batch_n = logits.shape[0]
         end = start + batch_n
         metric_state["start"] = end
 
         indices = train_idx[start:end].to(logits.device)
-        target_logits = train_full_logits[start:end].to(logits.device)
+        correct = train_correct[start:end].to(logits.device)
+        distractor = train_distractor[start:end].to(logits.device)
 
-        kl = kl_model_circuit(logits, target_logits, indices)
+        return logprob_diff(logits, indices, correct, distractor)
 
-        # EAP ranks edges by positive contribution to the objective.
-        # Since lower KL is better, use negative KL.
-        return -kl
-
-    print("Running KL-based EAP scoring...")
+    print("Running EAP scoring...")
 
     graph = EAP(
         model=model,
         clean_tokens=train_toks,
         corrupted_tokens=train_corr_toks,
-        metric=eap_kl_metric,
+        metric=eap_metric,
         upstream_nodes=["resid_pre", "head", "mlp"],
         downstream_nodes=["head", "mlp", "resid_post"],
         batch_size=args.batch_size,
@@ -315,10 +309,10 @@ def main():
 
     all_edges = graph.top_edges(
         n=graph.eap_scores.numel(),
-        abs_scores=False,
+        abs_scores=True,
     )
 
-    scores_path = os.path.join(args.out_dir, "eap_all_edges_kl_metric.json")
+    scores_path = os.path.join(args.out_dir, "eap_all_edges.json")
 
     with open(scores_path, "w") as f:
         json.dump(
@@ -327,7 +321,7 @@ def main():
             indent=2,
         )
 
-    print("Saved KL-based EAP ranking to", scores_path)
+    print("Saved EAP ranking to", scores_path)
 
     eval_toks, eval_corr_toks, eval_idx, eval_correct, eval_distractor = get_ioi_data(
         eval_ds,
