@@ -1,0 +1,8 @@
+data/
+data.zip
+results/
+logs/
+*.arrow
+*.pkl
+*.pt
+*.ckpt
