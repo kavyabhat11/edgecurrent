@@ -2,14 +2,14 @@
 #SBATCH --job-name=eap_ioi
 #SBATCH --output=logs/eap_ioi_%j.out
 #SBATCH --error=logs/eap_ioi_%j.err
-#SBATCH --time=04:00:00
+#SBATCH --time=12:00:00
 #SBATCH --mem=32G
 #SBATCH --gres=gpu:1
 #SBATCH --cpus-per-task=4
 
 cd ~/Edge-Pruning
 
-mkdir -p logs results/ioi-eap
+mkdir -p logs results/ioi-eap-val results/ioi-eap-test
 
 source ~/.bashrc
 conda activate /scratch/network/$USER/edgepruning_env_py311
@@ -20,8 +20,18 @@ export TRANSFORMERS_CACHE=/scratch/network/$USER/hf-cache
 export TMPDIR=/scratch/network/$USER/tmp
 mkdir -p "$HF_HOME" "$TMPDIR"
 
-python baselines_examples/run_eap_ioi.py \
-  --dataset-path data/datasets/merged/ioi/ \
-  --max-examples 200 \
-  --batch-size 20 \
-  --out-json-path results/ioi-eap/eap_edges.json
+# 1) Validation run: 200 examples (fast, sanity check + matches paper's val split)
+python baselines_examples/eap_ioi_paper.py \
+  --dataset-path data/data/datasets/ioi/ \
+  --train-examples 200 \
+  --eval-examples 200 \
+  --eval-split validation \
+  --out-dir results/ioi-eap-val
+
+# 2) Test run: 36,084 examples (paper-grade numbers)
+python baselines_examples/eap_ioi_paper.py \
+  --dataset-path data/data/datasets/ioi/ \
+  --train-examples 200 \
+  --eval-examples 36084 \
+  --eval-split test \
+  --out-dir results/ioi-eap-test
