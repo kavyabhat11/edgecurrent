@@ -356,14 +356,15 @@ class FQwen2Attention(nn.Module):
                 "when creating this class."
             )
 
-        self.attention_dropout = config.attention_dropout
+        self.attention_dropout = getattr(config, "attention_dropout", 0.0)
         self.hidden_size = config.hidden_size
         self.num_heads = config.num_attention_heads
         self.head_dim = self.hidden_size // self.num_heads
         self.num_key_value_heads = config.num_key_value_heads
         self.num_key_value_groups = self.num_heads // self.num_key_value_heads
         self.max_position_embeddings = config.max_position_embeddings
-        self.rope_theta = config.rope_theta
+        # Qwen2's HF config uses rope_theta=1000000.0 by default; older transformers may not expose it as an attribute.
+        self.rope_theta = getattr(config, "rope_theta", 1000000.0)
         self.is_causal = True
 
         if (self.head_dim * self.num_heads) != self.hidden_size:
@@ -381,7 +382,7 @@ class FQwen2Attention(nn.Module):
         self._init_rope()
 
     def _init_rope(self):
-        if self.config.rope_scaling is None:
+        if getattr(self.config, "rope_scaling", None) is None:
             self.rotary_emb = FQwen2RotaryEmbedding(
                 self.head_dim,
                 max_position_embeddings=self.max_position_embeddings,
@@ -832,7 +833,7 @@ class FQwen2SdpaAttention(FQwen2Attention):
         return attn_output, None, past_key_value
 
 
-FLLAMA_ATTENTION_CLASSES = {
+FQWEN2_ATTENTION_CLASSES = {
     "eager": FQwen2Attention,
     "flash_attention_2": FQwen2FlashAttention2,
     "sdpa": FQwen2SdpaAttention,
@@ -849,7 +850,7 @@ class FQwen2DecoderLayer(nn.Module):
         super().__init__()
         self.hidden_size = config.hidden_size
 
-        self.self_attn = FLLAMA_ATTENTION_CLASSES[config._attn_implementation](config=config, layer_idx=layer_idx)
+        self.self_attn = FQWEN2_ATTENTION_CLASSES[config._attn_implementation](config=config, layer_idx=layer_idx)
 
         self.mlp = FQwen2MLP(config)
         self.input_layernorm = FQwen2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
