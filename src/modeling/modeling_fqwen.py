@@ -1793,7 +1793,9 @@ class FQwen2ForCausalLMOutput(ModelOutput):
     node_loss: Optional[torch.FloatTensor] = None
 
 class FQwen2ForCausalLM(FQwen2PreTrainedModel):
-    _tied_weights_keys = ["lm_head.weight"]
+    # Newer transformers (>=4.50) expects a dict mapping target -> source for tied weights;
+    # older versions accept a list. Use the dict form for forward compatibility.
+    _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
 
     def __init__(
         self, 
