@@ -54,7 +54,15 @@ from transformers.utils import (
     ModelOutput,
     logging,
 )
-from transformers.utils.model_parallel_utils import assert_device_map, get_device_map
+# model_parallel_utils removed in newer transformers; the functions are only used by
+# the (deprecated) GPT-2 .parallelize()/.deparallelize() multi-GPU helpers we don't call.
+try:
+    from transformers.utils.model_parallel_utils import assert_device_map, get_device_map
+except ModuleNotFoundError:
+    def assert_device_map(*args, **kwargs):
+        raise NotImplementedError("model_parallel_utils not available; .parallelize() unsupported in this transformers version")
+    def get_device_map(*args, **kwargs):
+        raise NotImplementedError("model_parallel_utils not available; .parallelize() unsupported in this transformers version")
 from l0 import deterministic_z_from_log_alpha, sample_z_from_log_alpha
 
 logger = logging.get_logger(__name__)
