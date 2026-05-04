@@ -382,31 +382,35 @@ class FQwen2Attention(nn.Module):
         self._init_rope()
 
     def _init_rope(self):
-        if getattr(self.config, "rope_scaling", None) is None:
+        rope_scaling = getattr(self.config, "rope_scaling", None)
+        # Qwen2 may set rope_scaling to a dict using "rope_type" (newer) or "type" (older Llama-style),
+        # or leave it None. We only special-case linear/dynamic; otherwise fall back to default RoPE.
+        scaling_type = None
+        scaling_factor = 1.0
+        if isinstance(rope_scaling, dict):
+            scaling_type = rope_scaling.get("type") or rope_scaling.get("rope_type")
+            scaling_factor = rope_scaling.get("factor", 1.0)
+
+        if scaling_type == "linear":
+            self.rotary_emb = FQwen2LinearScalingRotaryEmbedding(
+                self.head_dim,
+                max_position_embeddings=self.max_position_embeddings,
+                scaling_factor=scaling_factor,
+                base=self.rope_theta,
+            )
+        elif scaling_type == "dynamic":
+            self.rotary_emb = FQwen2DynamicNTKScalingRotaryEmbedding(
+                self.head_dim,
+                max_position_embeddings=self.max_position_embeddings,
+                scaling_factor=scaling_factor,
+                base=self.rope_theta,
+            )
+        else:
             self.rotary_emb = FQwen2RotaryEmbedding(
                 self.head_dim,
                 max_position_embeddings=self.max_position_embeddings,
                 base=self.rope_theta,
             )
-        else:
-            scaling_type = self.config.rope_scaling["type"]
-            scaling_factor = self.config.rope_scaling["factor"]
-            if scaling_type == "linear":
-                self.rotary_emb = FQwen2LinearScalingRotaryEmbedding(
-                    self.head_dim,
-                    max_position_embeddings=self.max_position_embeddings,
-                    scaling_factor=scaling_factor,
-                    base=self.rope_theta,
-                )
-            elif scaling_type == "dynamic":
-                self.rotary_emb = FQwen2DynamicNTKScalingRotaryEmbedding(
-                    self.head_dim,
-                    max_position_embeddings=self.max_position_embeddings,
-                    scaling_factor=scaling_factor,
-                    base=self.rope_theta,
-                )
-            else:
-                raise ValueError(f"Unknown RoPE scaling type {scaling_type}")
 
     def _apply_headwise_linear(self, x, weight, num_heads, bias=None):
         # x is (num_q_or_kv_heads, batch_size, seq_len, hidden_size)
