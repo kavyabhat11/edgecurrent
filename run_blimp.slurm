@@ -6,9 +6,9 @@
 #SBATCH --mem=32G
 #SBATCH --gres=gpu:1
 #SBATCH --cpus-per-task=4
-#SBATCH --array=0-6
+#SBATCH --array=0-5
 
-# 7 sparsity levels (one per array task) for Edge Pruning on BLiMP s-v agreement.
+# 6 sparsity levels (one per array task) for Edge Pruning on BLiMP s-v agreement.
 
 set -e
 
@@ -27,7 +27,7 @@ export PYTHONUNBUFFERED=1
 export TMPDIR=/scratch/network/$USER/tmp
 mkdir -p "$HF_HOME" "$TMPDIR"
 
-SPARSITIES=(0.94 0.95 0.96 0.97 0.98 0.99 0.995)
+SPARSITIES=(0.94 0.95 0.96 0.97 0.98 0.99)
 EDGE_SPARSITY=${SPARSITIES[$SLURM_ARRAY_TASK_ID]}
 
 echo "Array idx: $SLURM_ARRAY_TASK_ID  ->  edge_sparsity=$EDGE_SPARSITY"
