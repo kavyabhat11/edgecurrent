@@ -38,7 +38,18 @@ from transformers.modeling_outputs import (
     TokenClassifierOutput,
 )
 from transformers import PreTrainedModel, GPT2Config, GPT2Tokenizer
-from transformers.pytorch_utils import Conv1D, find_pruneable_heads_and_indices, prune_conv1d_layer
+# Conv1D moved between transformers.pytorch_utils and transformers.modeling_utils across versions;
+# find_pruneable_heads_and_indices / prune_conv1d_layer are only used by GPT2Attention.prune_heads
+# (a HF head-pruning utility we don't call during Edge Pruning training/eval).
+try:
+    from transformers.pytorch_utils import Conv1D
+except ImportError:
+    from transformers.modeling_utils import Conv1D
+try:
+    from transformers.pytorch_utils import find_pruneable_heads_and_indices, prune_conv1d_layer
+except ImportError:
+    find_pruneable_heads_and_indices = None
+    prune_conv1d_layer = None
 from transformers.utils import (
     ModelOutput,
     logging,
