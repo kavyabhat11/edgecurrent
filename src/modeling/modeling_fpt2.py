@@ -1472,7 +1472,9 @@ class FPT2LMHeadModelOutput(ModelOutput):
     node_loss: Optional[torch.FloatTensor] = None
 
 class FPT2LMHeadModel(FPT2PreTrainedModel):
-    _tied_weights_keys = ["lm_head.weight"]
+    # Newer transformers (>=4.50) expects a dict mapping target -> source for tied weights;
+    # older versions accept a list. Use the dict form for forward compatibility.
+    _tied_weights_keys = {"lm_head.weight": "transformer.wte.weight"}
 
     def __init__(
         self, 
