@@ -1303,10 +1303,13 @@ class FPT2Model(FPT2PreTrainedModel):
                 attention_mask = (1.0 - attention_mask) * torch.finfo(self.dtype).min
 
         # Prepare head mask if needed
-        # 1.0 in head_mask indicate we keep the head
-        # attention_probs has shape bsz x n_heads x N x N
-        # head_mask has shape n_layer x batch x n_heads x N x N
-        head_mask = self.get_head_mask(head_mask, self.config.n_layer)
+        # Newer transformers removed `get_head_mask` from PreTrainedModel; we never use the
+        # head_mask path during Edge Pruning (our masking machinery handles it via L0 alphas),
+        # so just normalize to a list of None.
+        if hasattr(self, "get_head_mask"):
+            head_mask = self.get_head_mask(head_mask, self.config.n_layer)
+        else:
+            head_mask = [None] * self.config.n_layer
 
         if inputs_embeds is None:
             inputs_embeds = self.wte(input_ids)
