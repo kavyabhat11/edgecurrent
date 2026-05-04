@@ -387,17 +387,22 @@ class DataCollatorBLiMP:
 
             labels = input_ids.clone()
             labels[:len_prefix] = -100         # mask prefix
-            labels[len_prefix + 1:] = -100     # mask continuation; only the diff token contributes
+            # NOTE: loss extends from diff token through end of sentence. At the diff
+            # position (len_prefix), clean and corrupted activations are identical so
+            # KL contribution is 0 there; the post-diff positions provide the gradient
+            # signal because activations diverge after the verb is processed.
             labels[labels == self.tokenizer.pad_token_id] = -100
 
             input_ids_all.append(input_ids)
             corr_input_ids_all.append(corr_input_ids)
             labels_all.append(labels)
 
-            # KL slice: just the diff position. start = len_prefix - 1 (predicting position),
-            # end = len_prefix (slice is [start:end]).
+            # KL slice spans [len_prefix - 1, first_pad - 1]: the diff position AND all
+            # downstream positions. (Mirrors the IOI collator's logic.)
+            first_pad = (input_ids == self.tokenizer.pad_token_id).nonzero()
+            end_idx = first_pad[0].item() - 1 if len(first_pad) > 0 else len(input_ids)
             start_idxes.append(len_prefix - 1)
-            end_idxes.append(len_prefix)
+            end_idxes.append(end_idx)
 
         return {
             "input_ids": torch.stack(input_ids_all),
