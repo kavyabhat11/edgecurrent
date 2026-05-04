@@ -1687,9 +1687,11 @@ class FQwen2Model(FQwen2PreTrainedModel):
 
         next_cache = None
         if use_cache:
-            next_cache = (
-                next_decoder_cache.to_legacy_cache() if isinstance(next_decoder_cache, Cache) else next_decoder_cache
-            )
+            # Newer transformers (>=4.50) removed Cache.to_legacy_cache; pass the Cache object through.
+            if isinstance(next_decoder_cache, Cache) and hasattr(next_decoder_cache, "to_legacy_cache"):
+                next_cache = next_decoder_cache.to_legacy_cache()
+            else:
+                next_cache = next_decoder_cache
         
         if target_edge_sparsity is not None:
             target_edge_sparsity = torch.tensor(target_edge_sparsity, device=model_edge_sparsity.device, dtype=model_edge_sparsity.dtype)
