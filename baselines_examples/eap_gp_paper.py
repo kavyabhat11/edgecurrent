@@ -97,7 +97,10 @@ def gather_at_positions(logits, indices):
 
 
 def logprob_diff(logits, indices, correct, distractor):
-    logits_at_pos = gather_at_positions(logits, indices)
+    if logits.dim() == 3:
+        logits_at_pos = gather_at_positions(logits, indices)
+    else:
+        logits_at_pos = logits
     log_probs = F.log_softmax(logits_at_pos, dim=-1)
 
     correct_lp = torch.gather(log_probs, 1, correct.reshape(-1, 1)).squeeze(1)
@@ -107,8 +110,14 @@ def logprob_diff(logits, indices, correct, distractor):
 
 
 def kl_model_circuit(circuit_logits, full_logits, indices):
-    circuit_at_pos = gather_at_positions(circuit_logits, indices)
-    full_at_pos = gather_at_positions(full_logits, indices)
+    if circuit_logits.dim() == 3:
+        circuit_at_pos = gather_at_positions(circuit_logits, indices)
+    else:
+        circuit_at_pos = circuit_logits
+    if full_logits.dim() == 3:
+        full_at_pos = gather_at_positions(full_logits, indices)
+    else:
+        full_at_pos = full_logits
 
     circuit_log_probs = F.log_softmax(circuit_at_pos, dim=-1)
     full_log_probs = F.log_softmax(full_at_pos, dim=-1)
@@ -164,15 +173,22 @@ def make_removed_edge_matrix(graph, keep_edges):
 
 
 @torch.no_grad()
-def get_full_model_logits(model, tokens, batch_size):
+def get_full_model_logits_at_pos(model, tokens, pred_indices, batch_size):
     outs = []
     for i in tqdm(range(0, tokens.shape[0], batch_size), desc="Full model logits"):
         batch = tokens[i:i + batch_size].to(model.cfg.device)
-        outs.append(model(batch, return_type="logits").cpu())
+        idx = pred_indices[i:i + batch_size].to(model.cfg.device)
+        logits = model(batch, return_type="logits")
+        gathered = torch.gather(
+            logits,
+            1,
+            idx.reshape(-1, 1, 1).repeat(1, 1, logits.shape[-1]),
+        ).squeeze(1)
+        outs.append(gathered.cpu())
     return torch.cat(outs, dim=0)
 
 
-def circuit_logits_for_edges(model, clean_tokens, corr_tokens, keep_edges, batch_size):
+def circuit_logits_for_edges(model, clean_tokens, corr_tokens, pred_indices, keep_edges, batch_size):
     graph = EAPGraph(
         model.cfg,
         upstream_nodes=["head", "mlp"],
@@ -200,6 +216,7 @@ def circuit_logits_for_edges(model, clean_tokens, corr_tokens, keep_edges, batch
     for i in tqdm(range(0, num_prompts, batch_size), desc="Circuit eval"):
         batch_clean = clean_tokens[i:i + batch_size].to(model.cfg.device)
         batch_corr = corr_tokens[i:i + batch_size].to(model.cfg.device)
+        batch_idx = pred_indices[i:i + batch_size].to(model.cfg.device)
 
         if batch_clean.shape[0] != batch_size:
             continue
@@ -216,9 +233,14 @@ def circuit_logits_for_edges(model, clean_tokens, corr_tokens, keep_edges, batch
         model.add_hook(downstream_filter, patch_hook, "fwd")
 
         with torch.no_grad():
-            logits = model(batch_clean, return_type="logits").cpu()
+            logits = model(batch_clean, return_type="logits")
+            gathered = torch.gather(
+                logits,
+                1,
+                batch_idx.reshape(-1, 1, 1).repeat(1, 1, logits.shape[-1]),
+            ).squeeze(1).cpu()
 
-        logits_out.append(logits)
+        logits_out.append(gathered)
         model.reset_hooks()
 
     return torch.cat(logits_out, dim=0)
@@ -310,7 +332,7 @@ def main():
 
     print("DEBUG eval_toks shape:", eval_toks.shape)
 
-    full_logits = get_full_model_logits(model, eval_toks, args.eval_batch_size)
+    full_logits = get_full_model_logits_at_pos(model, eval_toks, eval_idx, args.eval_batch_size)
     full_ld = logprob_diff(full_logits, eval_idx, eval_correct, eval_distractor).item()
 
     rows = []
@@ -322,7 +344,7 @@ def main():
         keep_edges = all_edges[:k]
 
         circuit_logits = circuit_logits_for_edges(
-            model, eval_toks, eval_corr_toks, keep_edges, args.eval_batch_size,
+            model, eval_toks, eval_corr_toks, eval_idx, keep_edges, args.eval_batch_size,
         )
 
         kl = kl_model_circuit(

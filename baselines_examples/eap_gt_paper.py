@@ -87,8 +87,12 @@ def get_digit_token_ids(tokenizer, device):
 
 
 def gt_prob_diff(logits, indices, digits, digit_token_ids):
-    """Probability mass on digits > threshold minus mass on digits < threshold."""
-    logits_at_pos = gather_at_positions(logits, indices)  # [B, vocab]
+    """Probability mass on digits > threshold minus mass on digits < threshold.
+    Accepts logits as [B, seq, vocab] OR [B, vocab] (pre-gathered)."""
+    if logits.dim() == 3:
+        logits_at_pos = gather_at_positions(logits, indices)
+    else:
+        logits_at_pos = logits
     digit_logits = logits_at_pos[:, digit_token_ids]       # [B, 100]
     probs = F.softmax(digit_logits, dim=-1)
 
@@ -101,8 +105,14 @@ def gt_prob_diff(logits, indices, digits, digit_token_ids):
 
 def kl_model_circuit_gt(circuit_logits, full_logits, indices, digit_token_ids):
     """KL over the 100 digit tokens at the prediction position."""
-    c = gather_at_positions(circuit_logits, indices)[:, digit_token_ids]
-    f = gather_at_positions(full_logits, indices)[:, digit_token_ids]
+    if circuit_logits.dim() == 3:
+        c = gather_at_positions(circuit_logits, indices)[:, digit_token_ids]
+    else:
+        c = circuit_logits[:, digit_token_ids]
+    if full_logits.dim() == 3:
+        f = gather_at_positions(full_logits, indices)[:, digit_token_ids]
+    else:
+        f = full_logits[:, digit_token_ids]
     c_log = F.log_softmax(c, dim=-1)
     f_log = F.log_softmax(f, dim=-1)
     return F.kl_div(c_log, f_log, log_target=True, reduction="batchmean")
@@ -142,15 +152,22 @@ def make_removed_edge_matrix(graph, keep_edges):
 
 
 @torch.no_grad()
-def get_full_model_logits(model, tokens, batch_size):
+def get_full_model_logits_at_pos(model, tokens, pred_indices, batch_size):
     outs = []
     for i in tqdm(range(0, tokens.shape[0], batch_size), desc="Full model logits"):
         batch = tokens[i:i + batch_size].to(model.cfg.device)
-        outs.append(model(batch, return_type="logits").cpu())
+        idx = pred_indices[i:i + batch_size].to(model.cfg.device)
+        logits = model(batch, return_type="logits")
+        gathered = torch.gather(
+            logits,
+            1,
+            idx.reshape(-1, 1, 1).repeat(1, 1, logits.shape[-1]),
+        ).squeeze(1)
+        outs.append(gathered.cpu())
     return torch.cat(outs, dim=0)
 
 
-def circuit_logits_for_edges(model, clean_tokens, corr_tokens, keep_edges, batch_size):
+def circuit_logits_for_edges(model, clean_tokens, corr_tokens, pred_indices, keep_edges, batch_size):
     graph = EAPGraph(model.cfg, upstream_nodes=["head", "mlp"], downstream_nodes=["head", "mlp"])
     graph.adj_matrix = make_removed_edge_matrix(graph, keep_edges)
 
@@ -174,6 +191,7 @@ def circuit_logits_for_edges(model, clean_tokens, corr_tokens, keep_edges, batch
     for i in tqdm(range(0, num_prompts, batch_size), desc="Circuit eval"):
         batch_clean = clean_tokens[i:i + batch_size].to(model.cfg.device)
         batch_corr = corr_tokens[i:i + batch_size].to(model.cfg.device)
+        batch_idx = pred_indices[i:i + batch_size].to(model.cfg.device)
         if batch_clean.shape[0] != batch_size:
             continue
         model.reset_hooks()
@@ -185,8 +203,13 @@ def circuit_logits_for_edges(model, clean_tokens, corr_tokens, keep_edges, batch
         model.add_hook(upstream_filter, clean_hook, "fwd")
         model.add_hook(downstream_filter, patch_hook, "fwd")
         with torch.no_grad():
-            logits = model(batch_clean, return_type="logits").cpu()
-        logits_out.append(logits)
+            logits = model(batch_clean, return_type="logits")
+            gathered = torch.gather(
+                logits,
+                1,
+                batch_idx.reshape(-1, 1, 1).repeat(1, 1, logits.shape[-1]),
+            ).squeeze(1).cpu()
+        logits_out.append(gathered)
         model.reset_hooks()
 
     return torch.cat(logits_out, dim=0)
@@ -275,7 +298,7 @@ def main():
 
     print("DEBUG eval_toks shape:", eval_toks.shape)
 
-    full_logits = get_full_model_logits(model, eval_toks, args.eval_batch_size)
+    full_logits = get_full_model_logits_at_pos(model, eval_toks, eval_idx, args.eval_batch_size)
     full_pd = gt_prob_diff(full_logits, eval_idx, eval_digits, digit_token_ids_cpu).item()
 
     rows = []
@@ -287,7 +310,7 @@ def main():
         keep_edges = all_edges[:k]
 
         circuit_logits = circuit_logits_for_edges(
-            model, eval_toks, eval_corr_toks, keep_edges, args.eval_batch_size,
+            model, eval_toks, eval_corr_toks, eval_idx, keep_edges, args.eval_batch_size,
         )
 
         kl = kl_model_circuit_gt(
