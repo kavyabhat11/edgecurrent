@@ -1579,7 +1579,13 @@ class FQwen2Model(FQwen2PreTrainedModel):
         past_seen_tokens = 0
         if use_cache:  # kept for BC (cache positions)
             if not isinstance(past_key_values, StaticCache):
-                past_key_values = DynamicCache.from_legacy_cache(past_key_values)
+                # Newer transformers (>=4.50) removed DynamicCache.from_legacy_cache.
+                # If we already have a Cache instance, keep it. If we have a tuple-of-tuples
+                # (legacy format), wrap it; otherwise start fresh.
+                if hasattr(DynamicCache, "from_legacy_cache") and not isinstance(past_key_values, Cache):
+                    past_key_values = DynamicCache.from_legacy_cache(past_key_values)
+                elif past_key_values is None or not isinstance(past_key_values, Cache):
+                    past_key_values = DynamicCache()
                 past_seen_tokens = past_key_values.get_seq_length()
 
         if cache_position is None:
