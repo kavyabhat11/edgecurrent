@@ -76,8 +76,13 @@ def gather_at_positions(logits, indices):
 
 
 def get_digit_token_ids(tokenizer, device):
+    bos = tokenizer.bos_token_id
+
+    def first_real(ids):
+        return ids[1] if (ids and ids[0] == bos) else ids[0]
+
     return torch.LongTensor(
-        [tokenizer.encode("{:02d}".format(i))[0] for i in range(100)]
+        [first_real(tokenizer.encode("{:02d}".format(i))) for i in range(100)]
     ).to(device)
 
 

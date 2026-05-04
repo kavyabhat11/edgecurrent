@@ -56,17 +56,20 @@ def get_gp_data(ds, tokenizer, max_examples):
     correct_tokens = []
     distractor_tokens = []
 
-    rows_kept = []
+    bos = tokenizer.bos_token_id
+
+    def strip_bos(ids):
+        return ids[1:] if (ids and ids[0] == bos) else ids
+
     for i in range(len(ds)):
-        target = ds[i]["pronoun"].lower().strip()
-        distractor = "he" if target == "she" else "she"
-        target_ids = tokenizer.encode(" " + target)
-        distractor_ids = tokenizer.encode(" " + distractor)
+        target = ds[i]["pronoun"].strip()
+        distractor = ds[i]["corr_pronoun"].strip()
+        target_ids = strip_bos(tokenizer.encode(" " + target))
+        distractor_ids = strip_bos(tokenizer.encode(" " + distractor))
         if len(target_ids) > 1 or len(distractor_ids) > 1:
             continue
         clean_texts.append(ds[i]["prefix"] + " " + ds[i]["pronoun"])
         corr_texts.append(ds[i]["corr_prefix"] + " " + ds[i]["corr_pronoun"])
-        rows_kept.append(i)
         correct_tokens.append(target_ids[0])
         distractor_tokens.append(distractor_ids[0])
 
