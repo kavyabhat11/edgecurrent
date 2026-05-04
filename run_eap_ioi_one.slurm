@@ -24,6 +24,7 @@ export HF_HOME=/scratch/network/$USER/hf-cache
 export TRANSFORMERS_CACHE=/scratch/network/$USER/hf-cache
 export HF_HUB_OFFLINE=1
 export TRANSFORMERS_OFFLINE=1
+export PYTHONUNBUFFERED=1
 export TMPDIR=/scratch/network/$USER/tmp
 mkdir -p "$HF_HOME" "$TMPDIR"
 
