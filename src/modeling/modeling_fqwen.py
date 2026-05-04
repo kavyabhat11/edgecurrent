@@ -2055,3 +2055,8 @@ if __name__ == '__main__':
     # outputs = model.generate(**inputs, max_length=30)
     # output = tokenizer.batch_decode(outputs, skip_special_tokens=True, clean_up_tokenization_spaces=True)[0]
     # print(output)
+
+
+# Alias so prune/eval scripts (forked from fpt2_*) that import `FQwen2LMHeadModel` work.
+# The fpt2 codebase uses HF's `GPT2LMHeadModel` naming convention; Qwen2's is `Qwen2ForCausalLM`.
+FQwen2LMHeadModel = FQwen2ForCausalLM
