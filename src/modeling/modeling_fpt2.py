@@ -529,21 +529,21 @@ class FPT2Block(nn.Module):
         attn_read_common_mask = torch.zeros(self.n_writers, dtype=self._dtype)
         attn_read_common_mask[:self.attn_writer_offset] = 1
         attn_read_common_mask = attn_read_common_mask.unsqueeze(1)
-        self.register_buffer("attn_read_common_mask", attn_read_common_mask)
+        self.register_buffer("attn_read_common_mask", attn_read_common_mask, persistent=False)
         
         attn_write_common_mask = F.pad(
             torch.eye(self.n_head, dtype=torch.float32).to(self._dtype), # eye does not support bfloat16
             (self.attn_writer_offset, self.n_writers - self.attn_writer_offset - self.n_head, 0, 0)
         )
-        self.register_buffer("attn_write_common_mask", attn_write_common_mask)   
+        self.register_buffer("attn_write_common_mask", attn_write_common_mask, persistent=False)   
         
         mlp_read_common_mask = torch.zeros(self.n_writers, dtype=self._dtype)
         mlp_read_common_mask[:self.mlp_writer_offset] = 1
-        self.register_buffer("mlp_read_common_mask", mlp_read_common_mask)
+        self.register_buffer("mlp_read_common_mask", mlp_read_common_mask, persistent=False)
         
         mlp_write_common_mask = torch.zeros((self.n_writers, 1), dtype=self._dtype)
         mlp_write_common_mask[self.mlp_writer_offset, 0] = 1
-        self.register_buffer("mlp_write_common_mask", mlp_write_common_mask)     
+        self.register_buffer("mlp_write_common_mask", mlp_write_common_mask, persistent=False)     
 
     @torch.no_grad()
     def set_edge_threshold_for_deterministic(self, edge_threshold_for_deterministic):
@@ -561,6 +561,17 @@ class FPT2Block(nn.Module):
         self.attn_write_log_alphas.data.normal_(mean=10.0, std=0.01)
         self.mlp_read_log_alphas.data.normal_(mean=10.0, std=0.01)
         self.mlp_write_log_alphas.data.normal_(mean=10.0, std=0.01)
+        # Re-initialize deterministic mask buffers in case from_pretrained left them as
+        # uninitialized memory (transformers>=4.50 randomly inits missing persistent buffers).
+        self.attn_read_common_mask.zero_()
+        self.attn_read_common_mask[:self.attn_writer_offset, 0] = 1
+        self.attn_write_common_mask.zero_()
+        for h in range(self.n_head):
+            self.attn_write_common_mask[h, self.attn_writer_offset + h] = 1
+        self.mlp_read_common_mask.zero_()
+        self.mlp_read_common_mask[:self.mlp_writer_offset] = 1
+        self.mlp_write_common_mask.zero_()
+        self.mlp_write_common_mask[self.mlp_writer_offset, 0] = 1
 
     def attn_read(self, x, corr_x=None, embeds=None):
         # x is (writers, batch_size, sequence_length, hidden_size)
@@ -884,10 +895,10 @@ class FPT2Model(FPT2PreTrainedModel):
             
             token_write_mask = torch.zeros(self.n_writers, dtype=self._dtype)
             token_write_mask[0] = 1
-            self.register_buffer("token_write_mask", token_write_mask)
+            self.register_buffer("token_write_mask", token_write_mask, persistent=False)
             pos_write_mask = torch.zeros(self.n_writers, dtype=self._dtype)
             pos_write_mask[1] = 1
-            self.register_buffer("pos_write_mask", pos_write_mask)
+            self.register_buffer("pos_write_mask", pos_write_mask, persistent=False)
 
         self.final_read_log_alphas = nn.Parameter(torch.empty(self.n_writers, dtype=self._dtype))
         self.final_read_log_alphas.data.normal_(mean=10.0, std=0.01)
@@ -1167,6 +1178,11 @@ class FPT2Model(FPT2PreTrainedModel):
         if self.with_embedding_nodes:
             self.token_write_log_alpha.data.normal_(mean=10.0, std=0.01)
             self.pos_write_log_alpha.data.normal_(mean=10.0, std=0.01)
+            # Re-initialize the deterministic write masks; from_pretrained may have left them as garbage.
+            self.token_write_mask.zero_()
+            self.token_write_mask[0] = 1
+            self.pos_write_mask.zero_()
+            self.pos_write_mask[1] = 1
         for layer in self.h:
             layer.reset_all_log_alphas()
         self.final_read_log_alphas.data.normal_(mean=10.0, std=0.01)
