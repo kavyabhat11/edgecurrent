@@ -3,7 +3,7 @@
 #SBATCH --output=logs/eap_gt_train%x_%j.out
 #SBATCH --error=logs/eap_gt_train%x_%j.err
 #SBATCH --time=03:00:00
-#SBATCH --mem=32G
+#SBATCH --mem=64G
 #SBATCH --gres=gpu:1
 #SBATCH --cpus-per-task=4
 
