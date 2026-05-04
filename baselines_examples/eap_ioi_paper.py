@@ -54,7 +54,7 @@ def build_swap_corruption(ds_row):
     return template.format(A=ds_row["b"], B=ds_row["a"], OBJECT=obj, PLACE=place)
 
 
-def get_ioi_data(ds, tokenizer, max_examples, use_swap_corruption=True):
+def get_ioi_data(ds, tokenizer, max_examples, use_swap_corruption=False):
     if max_examples is not None and max_examples < len(ds):
         ds = ds.select(range(max_examples))
 
