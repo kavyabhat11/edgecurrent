@@ -887,13 +887,15 @@ class FQwen2DecoderLayer(nn.Module):
         attn_read_common_mask = torch.zeros(self.num_writers, dtype=self._dtype)
         attn_read_common_mask[:self.attn_writer_idx] = 1
         attn_read_common_mask = attn_read_common_mask.unsqueeze(1)
-        self.register_buffer("attn_read_common_mask", attn_read_common_mask)
+        # persistent=False: don't save/load via state_dict. HuggingFace's from_pretrained otherwise
+        # treats missing-from-checkpoint persistent buffers as needing init and overwrites our values.
+        self.register_buffer("attn_read_common_mask", attn_read_common_mask, persistent=False)
         
         attn_write_common_mask = F.pad(
             torch.eye(self.num_heads, dtype=torch.float32).to(self._dtype), # eye does not support bfloat16
             (self.attn_writer_idx, self.num_writers - self.attn_writer_idx - self.num_heads, 0, 0)
         )
-        self.register_buffer("attn_write_common_mask", attn_write_common_mask)
+        self.register_buffer("attn_write_common_mask", attn_write_common_mask, persistent=False)
         
         self.mlp_read_log_alphas = nn.Parameter(torch.empty(self.num_writers, dtype=self._dtype))
         self.mlp_write_log_alphas = nn.Parameter(torch.tensor([0.0], dtype=self._dtype))
@@ -902,11 +904,11 @@ class FQwen2DecoderLayer(nn.Module):
         
         mlp_read_common_mask = torch.zeros(self.num_writers, dtype=self._dtype)
         mlp_read_common_mask[:self.mlp_writer_idx] = 1
-        self.register_buffer("mlp_read_common_mask", mlp_read_common_mask)
+        self.register_buffer("mlp_read_common_mask", mlp_read_common_mask, persistent=False)
         
         mlp_write_common_mask = torch.zeros((self.num_writers, 1), dtype=self._dtype)
         mlp_write_common_mask[self.mlp_writer_idx, 0] = 1
-        self.register_buffer("mlp_write_common_mask", mlp_write_common_mask)
+        self.register_buffer("mlp_write_common_mask", mlp_write_common_mask, persistent=False)
 
     @torch.no_grad()
     def set_edge_threshold_for_deterministic(self, edge_threshold_for_deterministic):
@@ -1259,7 +1261,7 @@ class FQwen2Model(FQwen2PreTrainedModel):
             
             token_write_mask = torch.zeros(self.num_writers, dtype=self._dtype)
             token_write_mask[0] = 1
-            self.register_buffer("token_write_mask", token_write_mask)
+            self.register_buffer("token_write_mask", token_write_mask, persistent=False)
         
         self.final_read_log_alphas = nn.Parameter(torch.empty(self.num_writers, dtype=self._dtype))
         self.final_read_log_alphas.data.normal_(mean=10.0, std=0.01)
