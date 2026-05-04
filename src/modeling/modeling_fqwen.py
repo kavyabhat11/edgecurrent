@@ -972,6 +972,18 @@ class FQwen2DecoderLayer(nn.Module):
         self.attn_write_log_alphas.data.normal_(mean=10.0, std=0.01)
         self.mlp_read_log_alphas.data.normal_(mean=10.0, std=0.01)
         self.mlp_write_log_alphas.data.normal_(mean=10.0, std=0.01)
+        # Re-initialize deterministic mask buffers in case from_pretrained left them as
+        # uninitialized memory. These are computed purely from config.
+        self.attn_read_common_mask.zero_()
+        self.attn_read_common_mask[:self.attn_writer_idx, 0] = 1
+        # attn_write_common_mask has shape (num_heads, num_writers); head h writes at column attn_writer_idx + h.
+        self.attn_write_common_mask.zero_()
+        for h in range(self.num_heads):
+            self.attn_write_common_mask[h, self.attn_writer_idx + h] = 1
+        self.mlp_read_common_mask.zero_()
+        self.mlp_read_common_mask[:self.mlp_writer_idx] = 1
+        self.mlp_write_common_mask.zero_()
+        self.mlp_write_common_mask[self.mlp_writer_idx, 0] = 1
 
     @torch.no_grad()
     def load_attn_log_alphas(self, attn_in_edges):
@@ -1458,6 +1470,10 @@ class FQwen2Model(FQwen2PreTrainedModel):
     def reset_all_log_alphas(self):
         if self.with_embedding_nodes:
             self.token_write_log_alpha.data.normal_(mean=10.0, std=0.01)
+            # Re-initialize token_write_mask: 1 at index 0 (the embedding writer), 0 elsewhere.
+            # from_pretrained may have left this as uninitialized memory.
+            self.token_write_mask.zero_()
+            self.token_write_mask[0] = 1
         for layer in self.layers:
             layer.reset_all_log_alphas()
         self.final_read_log_alphas.data.normal_(mean=10.0, std=0.01)
