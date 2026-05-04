@@ -1,7 +1,7 @@
 #!/bin/bash
-#SBATCH --job-name=eap_ioi
-#SBATCH --output=logs/eap_ioi_%j.out
-#SBATCH --error=logs/eap_ioi_%j.err
+#SBATCH --job-name=eap_gp
+#SBATCH --output=logs/eap_gp_%j.out
+#SBATCH --error=logs/eap_gp_%j.err
 #SBATCH --time=12:00:00
 #SBATCH --mem=32G
 #SBATCH --gres=gpu:1
@@ -9,7 +9,7 @@
 
 cd ~/Edge-Pruning
 
-mkdir -p logs results/ioi-eap-val results/ioi-eap-test
+mkdir -p logs results/gp-eap-val results/gp-eap-test
 
 source ~/.bashrc
 conda activate /scratch/network/$USER/edgepruning_env_py311
@@ -22,20 +22,20 @@ export TRANSFORMERS_OFFLINE=1
 export TMPDIR=/scratch/network/$USER/tmp
 mkdir -p "$HF_HOME" "$TMPDIR"
 
-# 1) Validation run: 200 examples (fast, sanity check + matches paper's val split)
-python baselines_examples/eap_ioi_paper.py \
-  --dataset-path data/data/datasets/ioi/ \
+# 1) Validation
+python baselines_examples/eap_gp_paper.py \
+  --dataset-path data/data/datasets/gp/ \
   --train-examples 200 \
   --eval-examples 200 \
   --eval-split validation \
   --sparsities "93,94,95,96,97,98,99" \
-  --out-dir results/ioi-eap-val
+  --out-dir results/gp-eap-val
 
-# 2) Test run: 36,084 examples (paper-grade numbers)
-python baselines_examples/eap_ioi_paper.py \
-  --dataset-path data/data/datasets/ioi/ \
+# 2) Test
+python baselines_examples/eap_gp_paper.py \
+  --dataset-path data/data/datasets/gp/ \
   --train-examples 200 \
-  --eval-examples 36084 \
+  --eval-examples 100000 \
   --eval-split test \
   --sparsities "93,94,95,96,97,98,99" \
-  --out-dir results/ioi-eap-test
+  --out-dir results/gp-eap-test
