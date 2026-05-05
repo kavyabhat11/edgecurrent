@@ -397,12 +397,14 @@ class DataCollatorBLiMP:
             corr_input_ids_all.append(corr_input_ids)
             labels_all.append(labels)
 
-            # KL slice spans [len_prefix - 1, first_pad - 1]: the diff position AND all
-            # downstream positions. (Mirrors the IOI collator's logic.)
-            first_pad = (input_ids == self.tokenizer.pad_token_id).nonzero()
-            end_idx = first_pad[0].item() - 1 if len(first_pad) > 0 else len(input_ids)
-            start_idxes.append(len_prefix - 1)
-            end_idxes.append(end_idx)
+            # KL slice: the verb-position only. Logits at position len_prefix predict the
+            # token AFTER the verb. At this position, clean and corrupted activations
+            # genuinely differ (the model has integrated "was" vs "were"), so masking
+            # with corrupted activations has measurable effect — providing nonzero
+            # gradient signal concentrated at one high-signal position instead of
+            # diluted across many.
+            start_idxes.append(len_prefix)
+            end_idxes.append(len_prefix + 1)
 
         return {
             "input_ids": torch.stack(input_ids_all),
